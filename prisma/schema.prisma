@@ -1,14 +1,74 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
+}
+
+
+
+enum UserRole {
+  ADMIN
+  OPERADOR
+}
+
+enum PlaneStatus {
+  DISPONIBLE
+  EN_VUELO
+  MANTENIMIENTO
+}
+
+enum FlightStatus {
+  PROGRAMADO
+  EMBARCANDO
+  EN_VUELO
+  ATERRIZADO
+  CANCELADO
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  username  String   @unique
+  password  String
+  role      UserRole
+}
+
+model Plane {
+  id           Int         @id @default(autoincrement())
+  model        String
+  registration String      @unique
+  status       PlaneStatus @default(DISPONIBLE)
+  flights      Flight[]
+}
+
+model Flight {
+  id            Int           @id @default(autoincrement())
+  code          String        @unique
+  origin        String
+  destination   String
+  departureTime DateTime
+  arrivalTime   DateTime
+  status        FlightStatus  @default(PROGRAMADO)
+  planeId       Int?
+  plane         Plane?        @relation(fields: [planeId], references: [id])
+  crew          FlightCrew[]
+  deletedAt     DateTime?
+}
+
+model CrewMember {
+  id        Int          @id @default(autoincrement())
+  fullName  String
+  role      String
+  flights   FlightCrew[]
+}
+
+model FlightCrew {
+  id           Int        @id @default(autoincrement())
+  flightId     Int
+  crewMemberId Int
+  flight       Flight     @relation(fields: [flightId], references: [id])
+  crewMember   CrewMember @relation(fields: [crewMemberId], references: [id])
+
+  @@unique([flightId, crewMemberId])
 }
