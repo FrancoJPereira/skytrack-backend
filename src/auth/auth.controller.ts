@@ -19,7 +19,7 @@ export class AuthController {
         return req.user;
     }
 
-    // 👇 NUEVO ENDPOINT SOLO ADMIN
+
     @Get("admin-only")
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles("ADMIN")

@@ -1,4 +1,4 @@
-import { Controller, Get } from "@nestjs/common";
+import { Controller, Delete, Get, Param } from "@nestjs/common";
 import { FlightsService } from "./flights.service";
 
 @Controller("flights")
@@ -8,5 +8,10 @@ export class FlightsController {
     @Get()
     findAll() {
         return this.flights.findAll();
+    }
+
+    @Delete(":id")
+    softDelete(@Param("id") id: string) {
+        return this.flights.softDelete(Number(id));
     }
 }

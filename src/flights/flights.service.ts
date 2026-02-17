@@ -6,6 +6,15 @@ export class FlightsService {
     constructor(private prisma: PrismaService) { }
 
     findAll() {
-        return this.prisma.flight.findMany();
+        return this.prisma.flight.findMany({
+            where: { deletedAt: null },
+        });
+    }
+
+    async softDelete(id: number) {
+        return this.prisma.flight.update({
+            where: { id },
+            data: { deletedAt: new Date() },
+        });
     }
 }
