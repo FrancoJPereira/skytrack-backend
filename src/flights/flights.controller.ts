@@ -6,18 +6,17 @@ import { CreateFlightDto } from "./dto/create-flight.dto";
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { UpdateFlightDto } from "./dto/update-flight.dto";
 
-
-
-
 @Controller("flights")
 export class FlightsController {
     constructor(private flights: FlightsService) { }
+
     @Post()
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles("ADMIN")
     create(@Body() body: CreateFlightDto) {
         return this.flights.create(body);
     }
+
     @Patch(":id")
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles("ADMIN")
@@ -25,20 +24,20 @@ export class FlightsController {
         return this.flights.update(Number(id), body);
     }
 
-
-
     @Get()
     findAll(
         @Query("origin") origin?: string,
         @Query("destination") destination?: string,
-        @Query("status") status?: string,
-
+        @Query("status") status?: string
     ) {
         return this.flights.findAll({ origin, destination, status });
     }
 
-
     @Delete(":id")
+
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles("ADMIN")
+
     softDelete(@Param("id") id: string) {
         return this.flights.softDelete(Number(id));
     }

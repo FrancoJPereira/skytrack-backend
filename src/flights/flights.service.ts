@@ -5,11 +5,7 @@ import { PrismaService } from "../prisma/prisma.service";
 export class FlightsService {
     constructor(private prisma: PrismaService) { }
 
-    findAll(filters?: {
-        origin?: string;
-        destination?: string;
-        status?: string;
-    }) {
+    findAll(filters?: { origin?: string; destination?: string; status?: string }) {
         return this.prisma.flight.findMany({
             where: {
                 deletedAt: null,
@@ -20,13 +16,13 @@ export class FlightsService {
         });
     }
 
-
     async softDelete(id: number) {
         return this.prisma.flight.update({
             where: { id },
             data: { deletedAt: new Date() },
         });
     }
+
     async create(dto: {
         code: string;
         origin: string;
@@ -61,21 +57,32 @@ export class FlightsService {
             planeId?: number | null;
         }
     ) {
+
+        const existingFlight = await this.prisma.flight.findUnique({
+            where: { id },
+        });
+
+        if (!existingFlight || existingFlight.deletedAt) {
+            throw new Error("El vuelo no existe o fue eliminado");
+        }
+
+
         const updatedFlight = await this.prisma.flight.update({
             where: { id },
             data: {
                 ...(dto.code !== undefined && { code: dto.code }),
                 ...(dto.origin !== undefined && { origin: dto.origin }),
                 ...(dto.destination !== undefined && { destination: dto.destination }),
-                ...(dto.departureTime !== undefined && { departureTime: new Date(dto.departureTime) }),
+                ...(dto.departureTime !== undefined && {
+                    departureTime: new Date(dto.departureTime),
+                }),
                 ...(dto.arrivalTime !== undefined && { arrivalTime: new Date(dto.arrivalTime) }),
                 ...(dto.status !== undefined && { status: dto.status as any }),
                 ...(dto.planeId !== undefined && { planeId: dto.planeId }),
             },
         });
 
-        // Regla de consistencia: si el vuelo queda EN_VUELO y tiene avión asignado,
-        // el avión también pasa a EN_VUELO.
+
         if (dto.status === "EN_VUELO" && updatedFlight.planeId) {
             await this.prisma.plane.update({
                 where: { id: updatedFlight.planeId },
@@ -85,6 +92,4 @@ export class FlightsService {
 
         return updatedFlight;
     }
-
-
 }
