@@ -1,5 +1,14 @@
+import { IsEnum, IsNotEmpty, IsString } from "class-validator";
+
 export class CreatePlaneDto {
-    model!: string;
-    registration!: string;
-    status?: string; // DISPONIBLE | EN_VUELO | MANTENIMIENTO
+    @IsString()
+    @IsNotEmpty()
+    model: string;
+
+    @IsString()
+    @IsNotEmpty()
+    registration: string;
+
+    @IsEnum(["DISPONIBLE", "MANTENIMIENTO", "EN_VUELO"])
+    status: string;
 }

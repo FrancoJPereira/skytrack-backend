@@ -1,5 +1,17 @@
+import { IsEnum, IsNotEmpty, IsOptional, IsString } from "class-validator";
+
 export class UpdatePlaneDto {
+    @IsOptional()
+    @IsString()
+    @IsNotEmpty()
     model?: string;
+
+    @IsOptional()
+    @IsString()
+    @IsNotEmpty()
     registration?: string;
-    status?: string; // DISPONIBLE | EN_VUELO | MANTENIMIENTO
+
+    @IsOptional()
+    @IsEnum(["DISPONIBLE", "MANTENIMIENTO", "EN_VUELO"])
+    status?: string;
 }
