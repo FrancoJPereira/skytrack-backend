@@ -17,7 +17,20 @@ export class PlanesService {
                 status: (dto.status as any) ?? undefined,
             },
         });
+
     }
+
+    async update(id: number, dto: { model?: string; registration?: string; status?: string }) {
+        return this.prisma.plane.update({
+            where: { id },
+            data: {
+                ...(dto.model !== undefined && { model: dto.model }),
+                ...(dto.registration !== undefined && { registration: dto.registration }),
+                ...(dto.status !== undefined && { status: dto.status as any }),
+            },
+        });
+    }
+
 
 }
 
