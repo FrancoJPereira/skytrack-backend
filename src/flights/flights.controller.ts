@@ -1,9 +1,11 @@
-import { Body, Controller, Delete, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
 import { FlightsService } from "./flights.service";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { RolesGuard } from "../auth/roles.guard";
 import { Roles } from "../auth/roles.decorator";
 import { CreateFlightDto } from "./dto/create-flight.dto";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { UpdateFlightDto } from "./dto/update-flight.dto";
+
 
 
 
@@ -16,6 +18,13 @@ export class FlightsController {
     create(@Body() body: CreateFlightDto) {
         return this.flights.create(body);
     }
+    @Patch(":id")
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles("ADMIN")
+    update(@Param("id") id: string, @Body() body: UpdateFlightDto) {
+        return this.flights.update(Number(id), body);
+    }
+
 
 
     @Get()

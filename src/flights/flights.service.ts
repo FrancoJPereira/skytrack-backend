@@ -49,4 +49,28 @@ export class FlightsService {
         });
     }
 
+    async update(id: number, dto: {
+        code?: string;
+        origin?: string;
+        destination?: string;
+        departureTime?: string;
+        arrivalTime?: string;
+        status?: string;
+        planeId?: number | null;
+    }) {
+        return this.prisma.flight.update({
+            where: { id },
+            data: {
+                ...(dto.code !== undefined && { code: dto.code }),
+                ...(dto.origin !== undefined && { origin: dto.origin }),
+                ...(dto.destination !== undefined && { destination: dto.destination }),
+                ...(dto.departureTime !== undefined && { departureTime: new Date(dto.departureTime) }),
+                ...(dto.arrivalTime !== undefined && { arrivalTime: new Date(dto.arrivalTime) }),
+                ...(dto.status !== undefined && { status: dto.status as any }),
+                ...(dto.planeId !== undefined && { planeId: dto.planeId }),
+            },
+        });
+    }
+
+
 }
