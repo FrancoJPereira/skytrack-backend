@@ -49,16 +49,19 @@ export class FlightsService {
         });
     }
 
-    async update(id: number, dto: {
-        code?: string;
-        origin?: string;
-        destination?: string;
-        departureTime?: string;
-        arrivalTime?: string;
-        status?: string;
-        planeId?: number | null;
-    }) {
-        return this.prisma.flight.update({
+    async update(
+        id: number,
+        dto: {
+            code?: string;
+            origin?: string;
+            destination?: string;
+            departureTime?: string;
+            arrivalTime?: string;
+            status?: string;
+            planeId?: number | null;
+        }
+    ) {
+        const updatedFlight = await this.prisma.flight.update({
             where: { id },
             data: {
                 ...(dto.code !== undefined && { code: dto.code }),
@@ -70,6 +73,17 @@ export class FlightsService {
                 ...(dto.planeId !== undefined && { planeId: dto.planeId }),
             },
         });
+
+        // Regla de consistencia: si el vuelo queda EN_VUELO y tiene avión asignado,
+        // el avión también pasa a EN_VUELO.
+        if (dto.status === "EN_VUELO" && updatedFlight.planeId) {
+            await this.prisma.plane.update({
+                where: { id: updatedFlight.planeId },
+                data: { status: "EN_VUELO" },
+            });
+        }
+
+        return updatedFlight;
     }
 
 
