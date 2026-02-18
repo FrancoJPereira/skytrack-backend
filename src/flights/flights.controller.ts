@@ -41,4 +41,25 @@ export class FlightsController {
     softDelete(@Param("id") id: string) {
         return this.flights.softDelete(Number(id));
     }
+
+    @Post(":id/crew/:crewId")
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles("ADMIN")
+    addCrew(@Param("id") id: string, @Param("crewId") crewId: string) {
+        return this.flights.addCrewMember(Number(id), Number(crewId));
+    }
+
+    @Delete(":id/crew/:crewId")
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles("ADMIN")
+    removeCrew(@Param("id") id: string, @Param("crewId") crewId: string) {
+        return this.flights.removeCrewMember(Number(id), Number(crewId));
+    }
+
+    @Get(":id/crew")
+    @UseGuards(JwtAuthGuard) // cualquiera logueado puede ver tripulación del vuelo
+    getCrew(@Param("id") id: string) {
+        return this.flights.getCrewForFlight(Number(id));
+    }
+
 }
