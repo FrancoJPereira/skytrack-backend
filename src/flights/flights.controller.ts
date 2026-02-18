@@ -57,9 +57,9 @@ export class FlightsController {
     }
 
     @Get(":id/crew")
-    @UseGuards(JwtAuthGuard) // cualquiera logueado puede ver tripulación del vuelo
     getCrew(@Param("id") id: string) {
         return this.flights.getCrewForFlight(Number(id));
     }
+
 
 }

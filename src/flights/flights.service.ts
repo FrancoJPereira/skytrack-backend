@@ -1,10 +1,15 @@
 import {
     BadRequestException,
-    ConflictException,
     Injectable,
     NotFoundException,
 } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { FlightStatus, PlaneStatus } from "@prisma/client";
+
+const FINAL_STATUSES: FlightStatus[] = [
+    FlightStatus.ATERRIZADO,
+    FlightStatus.CANCELADO,
+];
 
 @Injectable()
 export class FlightsService {
@@ -18,6 +23,7 @@ export class FlightsService {
                 ...(filters?.destination && { destination: filters.destination }),
                 ...(filters?.status && { status: filters.status as any }),
             },
+            orderBy: { id: "asc" },
         });
     }
 
@@ -35,13 +41,28 @@ export class FlightsService {
             const plane = await this.prisma.plane.findUnique({
                 where: { id: dto.planeId },
             });
+            if (!plane) throw new BadRequestException("El avión no existe");
+            if (plane.status !== PlaneStatus.DISPONIBLE) {
+                throw new BadRequestException("El avión no está DISPONIBLE");
+            }
 
-            if (!plane) throw new NotFoundException("El avión no existe");
-            if (plane.status !== "DISPONIBLE")
-                throw new ConflictException("El avión no está DISPONIBLE");
+            // Evitar que el avión esté asignado a otro vuelo ACTIVO
+            const otherActive = await this.prisma.flight.findFirst({
+                where: {
+                    planeId: dto.planeId,
+                    deletedAt: null,
+                    status: { notIn: FINAL_STATUSES },
+                },
+                select: { id: true },
+            });
+            if (otherActive) {
+                throw new BadRequestException(
+                    `El avión ya está asignado al vuelo ${otherActive.id}`,
+                );
+            }
         }
 
-        const flight = await this.prisma.flight.create({
+        const created = await this.prisma.flight.create({
             data: {
                 code: dto.code,
                 origin: dto.origin,
@@ -53,15 +74,15 @@ export class FlightsService {
             },
         });
 
-        // Consistencia: si creás EN_VUELO con avión, avión pasa a EN_VUELO
-        if (dto.status === "EN_VUELO" && flight.planeId) {
+        // Consistencia: si lo crean EN_VUELO y tiene avión, el avión pasa a EN_VUELO
+        if (created.status === FlightStatus.EN_VUELO && created.planeId) {
             await this.prisma.plane.update({
-                where: { id: flight.planeId },
-                data: { status: "EN_VUELO" },
+                where: { id: created.planeId },
+                data: { status: PlaneStatus.EN_VUELO },
             });
         }
 
-        return flight;
+        return created;
     }
 
     async update(
@@ -74,42 +95,80 @@ export class FlightsService {
             arrivalTime?: string;
             status?: string;
             planeId?: number | null;
-        }
+        },
     ) {
         const existing = await this.prisma.flight.findUnique({ where: { id } });
-
-        if (!existing) throw new NotFoundException("El vuelo no existe");
-        if (existing.deletedAt)
+        if (!existing || existing.deletedAt) {
             throw new NotFoundException("El vuelo no existe o fue eliminado");
+        }
 
-        // Regla A: No permitir updates si está CANCELADO o ATERRIZADO
-        if (existing.status === "CANCELADO" || existing.status === "ATERRIZADO") {
+        const previousPlaneId = existing.planeId;
+
+        // Bloqueo si ya está finalizado
+        if (FINAL_STATUSES.includes(existing.status)) {
+            if (dto.status && dto.status !== existing.status) {
+                throw new BadRequestException(
+                    "El vuelo está finalizado y no puede cambiar de estado",
+                );
+            }
+            if (dto.planeId !== undefined) {
+                throw new BadRequestException(
+                    "El vuelo está finalizado y no puede cambiar de avión",
+                );
+            }
+        }
+
+        const newStatus = (dto.status as FlightStatus | undefined) ?? existing.status;
+
+        // Resultado final de avión (considerando si mandó planeId o no)
+        const resultingPlaneId =
+            dto.planeId !== undefined ? dto.planeId : existing.planeId;
+
+        // Regla: no se puede EN_VUELO sin avión
+        if (newStatus === FlightStatus.EN_VUELO && !resultingPlaneId) {
             throw new BadRequestException(
-                "No se puede modificar un vuelo CANCELADO o ATERRIZADO"
+                "No se puede poner EN_VUELO un vuelo sin avión asignado",
             );
         }
 
-        // Validación si se quiere setear/cambiar planeId
-        if (dto.planeId !== undefined && dto.planeId !== null) {
-            const plane = await this.prisma.plane.findUnique({
-                where: { id: dto.planeId },
-            });
+        // VALIDACIÓN DE AVIÓN (solo si está cambiando a otro avión)
+        const isChangingPlane =
+            dto.planeId !== undefined && dto.planeId !== previousPlaneId;
 
-            if (!plane) throw new NotFoundException("El avión no existe");
-            if (plane.status !== "DISPONIBLE")
-                throw new ConflictException("El avión no está DISPONIBLE");
+        if (isChangingPlane) {
+            // Si planeId viene null => está desasignando, permitido solo si NO queda EN_VUELO
+            if (dto.planeId === null) {
+                if (newStatus === FlightStatus.EN_VUELO) {
+                    throw new BadRequestException(
+                        "No se puede quitar el avión si el vuelo queda EN_VUELO",
+                    );
+                }
+            } else {
+                // planeId nuevo
+                const plane = await this.prisma.plane.findUnique({
+                    where: { id: dto.planeId },
+                });
+                if (!plane) throw new BadRequestException("El avión no existe");
+                if (plane.status !== PlaneStatus.DISPONIBLE) {
+                    throw new BadRequestException("El avión no está DISPONIBLE");
+                }
 
-            // Regla A extra: evitar asignar un avión ya usado por otro vuelo EN_VUELO
-            const alreadyInUse = await this.prisma.flight.findFirst({
-                where: {
-                    deletedAt: null,
-                    status: "EN_VUELO",
-                    planeId: dto.planeId,
-                    id: { not: id },
-                },
-            });
-            if (alreadyInUse)
-                throw new ConflictException("El avión ya está asignado a un vuelo EN_VUELO");
+                // Evitar avión asignado a otro vuelo activo
+                const otherActive = await this.prisma.flight.findFirst({
+                    where: {
+                        planeId: dto.planeId,
+                        deletedAt: null,
+                        status: { notIn: FINAL_STATUSES },
+                        id: { not: id },
+                    },
+                    select: { id: true },
+                });
+                if (otherActive) {
+                    throw new BadRequestException(
+                        `El avión ya está asignado al vuelo ${otherActive.id}`,
+                    );
+                }
+            }
         }
 
         const updated = await this.prisma.flight.update({
@@ -129,11 +188,28 @@ export class FlightsService {
             },
         });
 
-        // Consistencia: si queda EN_VUELO con avión, avión pasa a EN_VUELO
-        if (dto.status === "EN_VUELO" && updated.planeId) {
+        // --- Consistencia de avión ---
+        // 1) Si cambió el avión y había uno anterior, liberar el anterior
+        if (isChangingPlane && previousPlaneId) {
+            await this.prisma.plane.update({
+                where: { id: previousPlaneId },
+                data: { status: PlaneStatus.DISPONIBLE },
+            });
+        }
+
+        // 2) Si el vuelo queda EN_VUELO y tiene avión → avión EN_VUELO
+        if (updated.status === FlightStatus.EN_VUELO && updated.planeId) {
             await this.prisma.plane.update({
                 where: { id: updated.planeId },
-                data: { status: "EN_VUELO" },
+                data: { status: PlaneStatus.EN_VUELO },
+            });
+        }
+
+        // 3) Si el vuelo queda FINAL (ATERRIZADO/CANCELADO) → liberar avión
+        if (FINAL_STATUSES.includes(updated.status) && updated.planeId) {
+            await this.prisma.plane.update({
+                where: { id: updated.planeId },
+                data: { status: PlaneStatus.DISPONIBLE },
             });
         }
 
@@ -142,23 +218,13 @@ export class FlightsService {
 
     async softDelete(id: number) {
         const flight = await this.prisma.flight.findUnique({ where: { id } });
+        if (!flight || flight.deletedAt) throw new NotFoundException("Vuelo no encontrado");
 
-        if (!flight) throw new NotFoundException("Vuelo no encontrado");
-        if (flight.deletedAt)
-            throw new NotFoundException("El vuelo no existe o fue eliminado");
-
-        // Regla A: no borrar si está EN_VUELO o ATERRIZADO
-        if (flight.status === "EN_VUELO" || flight.status === "ATERRIZADO") {
-            throw new BadRequestException(
-                "No se puede eliminar un vuelo EN_VUELO o ATERRIZADO"
-            );
-        }
-
-        // Si tenía avión asignado, liberarlo
+        // liberar avión si tenía
         if (flight.planeId) {
             await this.prisma.plane.update({
                 where: { id: flight.planeId },
-                data: { status: "DISPONIBLE" },
+                data: { status: PlaneStatus.DISPONIBLE },
             });
         }
 
@@ -167,25 +233,36 @@ export class FlightsService {
             data: { deletedAt: new Date() },
         });
     }
-    async addCrewMember(flightId: number, crewMemberId: number) {
+
+    // --------------------------
+    // Tripulación (FlightCrew)
+    // --------------------------
+
+    private async assertFlightUsableForCrew(flightId: number) {
         const flight = await this.prisma.flight.findUnique({ where: { id: flightId } });
         if (!flight || flight.deletedAt) {
             throw new NotFoundException("El vuelo no existe o fue eliminado");
         }
+        if (FINAL_STATUSES.includes(flight.status)) {
+            throw new BadRequestException(
+                "No se puede modificar tripulación en un vuelo finalizado",
+            );
+        }
+        return flight;
+    }
+
+    async addCrewMember(flightId: number, crewMemberId: number) {
+        await this.assertFlightUsableForCrew(flightId);
 
         const crew = await this.prisma.crewMember.findUnique({ where: { id: crewMemberId } });
-        if (!crew) {
-            throw new NotFoundException("El tripulante no existe");
+        if (!crew || (crew as any).deletedAt) {
+            throw new NotFoundException("El tripulante no existe o fue eliminado");
         }
 
-        // Evitar duplicados (por @@unique([flightId, crewMemberId]))
-        const exists = await this.prisma.flightCrew.findFirst({
-            where: { flightId, crewMemberId },
+        const exists = await this.prisma.flightCrew.findUnique({
+            where: { flightId_crewMemberId: { flightId, crewMemberId } },
         });
-
-        if (exists) {
-            throw new BadRequestException("El tripulante ya está asignado a ese vuelo");
-        }
+        if (exists) throw new BadRequestException("El tripulante ya está asignado a ese vuelo");
 
         return this.prisma.flightCrew.create({
             data: { flightId, crewMemberId },
@@ -194,21 +271,15 @@ export class FlightsService {
     }
 
     async removeCrewMember(flightId: number, crewMemberId: number) {
-        const flight = await this.prisma.flight.findUnique({ where: { id: flightId } });
-        if (!flight || flight.deletedAt) {
-            throw new NotFoundException("El vuelo no existe o fue eliminado");
-        }
+        await this.assertFlightUsableForCrew(flightId);
 
-        const exists = await this.prisma.flightCrew.findFirst({
-            where: { flightId, crewMemberId },
+        const exists = await this.prisma.flightCrew.findUnique({
+            where: { flightId_crewMemberId: { flightId, crewMemberId } },
         });
-
-        if (!exists) {
-            throw new NotFoundException("Ese tripulante no está asignado a ese vuelo");
-        }
+        if (!exists) throw new NotFoundException("Ese tripulante no está asignado a ese vuelo");
 
         return this.prisma.flightCrew.delete({
-            where: { id: exists.id },
+            where: { flightId_crewMemberId: { flightId, crewMemberId } },
         });
     }
 
@@ -224,5 +295,4 @@ export class FlightsService {
             orderBy: { id: "asc" },
         });
     }
-
 }

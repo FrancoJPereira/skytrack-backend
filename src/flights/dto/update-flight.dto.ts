@@ -1,6 +1,14 @@
-import { IsEnum, IsISO8601, IsInt, IsOptional, IsString, Matches, Min, IsNotEmpty } from "class-validator";
+import {
+    IsISO8601,
+    IsInt,
+    IsOptional,
+    IsString,
+    Matches,
+    Min,
+    IsNotEmpty,
+    IsIn,
+} from "class-validator";
 import { Type } from "class-transformer";
-
 
 export class UpdateFlightDto {
     @IsOptional()
@@ -28,16 +36,14 @@ export class UpdateFlightDto {
     arrivalTime?: string;
 
     @IsOptional()
-    @IsEnum(["PROGRAMADO", "EMBARCANDO", "EN_VUELO", "ATERRIZADO", "CANCELADO"], {
+    @IsIn(["PROGRAMADO", "EMBARCANDO", "EN_VUELO", "ATERRIZADO", "CANCELADO"], {
         message: "status inválido",
     })
     status?: string;
-
 
     @IsOptional()
     @Type(() => Number)
     @IsInt()
     @Min(1)
     planeId?: number | null;
-
 }

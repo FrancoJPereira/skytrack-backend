@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { CrewService } from "./crew.service";
 import { CreateCrewDto } from "./dto/create-crew.dto";
 import { UpdateCrewDto } from "./dto/update-crew.dto";
@@ -27,5 +27,12 @@ export class CrewController {
     @Roles("ADMIN")
     update(@Param("id") id: string, @Body() body: UpdateCrewDto) {
         return this.crew.update(Number(id), body);
+    }
+
+    @Delete(":id")
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles("ADMIN")
+    softDelete(@Param("id") id: string) {
+        return this.crew.softDelete(Number(id));
     }
 }

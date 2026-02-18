@@ -62,7 +62,9 @@ model CrewMember {
   fullName  String
   role      String
   flights   FlightCrew[]
+  deletedAt DateTime?
 }
+
 
 model FlightCrew {
   id           Int        @id @default(autoincrement())
