@@ -36,3 +36,4 @@ export class CrewController {
         return this.crew.softDelete(Number(id));
     }
 }
+
